@@ -17,6 +17,7 @@
 //                 Sven Stucki - svstucki@student.ethz.ch                     //
 //                 Michael Gautschi - gautschi@iis.ee.ethz.ch                 //
 //                 Davide Schiavone - pschiavo@iis.ee.ethz.ch                 //
+//                 Noam Gallmann - gnoam@live.com
 //                                                                            //
 // Design Name:    Top level module                                           //
 // Project Name:   RI5CY                                                      //
@@ -27,6 +28,10 @@
 //                 and the FPU                                                //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
+
+`ifdef RISCV_FORMAL
+  `define RVFI
+`endif
 
 module cv32e40p_core import cv32e40p_apu_core_pkg::*;
 #(
@@ -95,6 +100,33 @@ module cv32e40p_core import cv32e40p_apu_core_pkg::*;
   // CPU Control Signals
   input  logic        fetch_enable_i,
   output logic        core_sleep_o
+
+  // RISC-V Formal Interface
+`ifdef RVFI
+    output logic        rvfi_valid,
+    output logic [63:0] rvfi_order,
+    output logic [31:0] rvfi_insn,
+    output logic        rvfi_trap,
+    output logic        rvfi_halt,
+    output logic        rvfi_intr,
+    output logic [ 1:0] rvfi_mode,
+    output logic [ 1:0] rvfi_ixl,
+    output logic [ 4:0] rvfi_rs1_addr,
+    output logic [ 4:0] rvfi_rs2_addr,
+    output logic [ 4:0] rvfi_rs3_addr,
+    output logic [31:0] rvfi_rs1_rdata,
+    output logic [31:0] rvfi_rs2_rdata,
+    output logic [31:0] rvfi_rs3_rdata,
+    output logic [ 4:0] rvfi_rd_addr,
+    output logic [31:0] rvfi_rd_wdata,
+    output logic [31:0] rvfi_pc_rdata,
+    output logic [31:0] rvfi_pc_wdata,
+    output logic [31:0] rvfi_mem_addr,
+    output logic [ 3:0] rvfi_mem_rmask,
+    output logic [ 3:0] rvfi_mem_wmask,
+    output logic [31:0] rvfi_mem_rdata,
+    output logic [31:0] rvfi_mem_wdata,
+`endif
 );
 
   import cv32e40p_pkg::*;
@@ -115,8 +147,8 @@ module cv32e40p_core import cv32e40p_apu_core_pkg::*;
 
   // PULP bus interface behavior
   // If enabled will allow non-stable address phase signals during waited instructions requests and
-  // will re-introduce combinatorial paths from instr_rvalid_i to instr_req_o and from from data_rvalid_i 
-  // to data_req_o 
+  // will re-introduce combinatorial paths from instr_rvalid_i to instr_req_o and from from data_rvalid_i
+  // to data_req_o
   localparam PULP_OBI            = 0;
 
   // Unused signals related to above unused parameters
@@ -377,6 +409,40 @@ module cv32e40p_core import cv32e40p_apu_core_pkg::*;
       end
    endgenerate
 
+  // RISC-V Formal Interface signals
+`ifdef RVFI
+  logic        rvfi_instr_new_wb;
+  logic        rvfi_intr_d;
+  logic        rvfi_intr_q;
+  logic        rvfi_set_trap_pc_d;
+  logic        rvfi_set_trap_pc_q;
+  logic [31:0] rvfi_insn_id;
+  logic [4:0]  rvfi_rs1_addr_d;
+  logic [4:0]  rvfi_rs1_addr_q;
+  logic [4:0]  rvfi_rs2_addr_d;
+  logic [4:0]  rvfi_rs2_addr_q;
+  logic [4:0]  rvfi_rs3_addr_d;
+  logic [31:0] rvfi_rs1_data_d;
+  logic [31:0] rvfi_rs1_data_q;
+  logic [31:0] rvfi_rs2_data_d;
+  logic [31:0] rvfi_rs2_data_q;
+  logic [31:0] rvfi_rs3_data_d;
+  logic [4:0]  rvfi_rd_addr_wb;
+  logic [4:0]  rvfi_rd_addr_q;
+  logic [4:0]  rvfi_rd_addr_d;
+  logic [31:0] rvfi_rd_wdata_wb;
+  logic [31:0] rvfi_rd_wdata_d;
+  logic [31:0] rvfi_rd_wdata_q;
+  logic        rvfi_rd_we_wb;
+  logic [3:0]  rvfi_mem_mask_int;
+  logic [31:0] rvfi_mem_rdata_d;
+  logic [31:0] rvfi_mem_rdata_q;
+  logic [31:0] rvfi_mem_wdata_d;
+  logic [31:0] rvfi_mem_wdata_q;
+  logic [31:0] rvfi_mem_addr_d;
+  logic [31:0] rvfi_mem_addr_q;
+`endif
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   //   ____ _            _      __  __                                                   _    //
   //  / ___| | ___   ___| | __ |  \/  | __ _ _ __   __ _  __ _  ___ _ __ ___   ___ _ __ | |_  //
@@ -391,7 +457,7 @@ module cv32e40p_core import cv32e40p_apu_core_pkg::*;
 
   cv32e40p_sleep_unit
   #(
-    .PULP_CLUSTER               ( PULP_CLUSTER         ) 
+    .PULP_CLUSTER               ( PULP_CLUSTER         )
   )
   sleep_unit_i
   (
@@ -1138,7 +1204,7 @@ module cv32e40p_core import cv32e40p_apu_core_pkg::*;
   // Assumptions
   //----------------------------------------------------------------------------
 
-  // Assume that IRQ indices which are reserved by the RISC-V privileged spec 
+  // Assume that IRQ indices which are reserved by the RISC-V privileged spec
   // or are meant for User or Hypervisor mode are not used (i.e. tied to 0)
   property p_no_reserved_irq;
      @(posedge clk_i) disable iff (!rst_ni) (1'b1) |-> ((irq_i & ~IRQ_MASK) == 'b0);
@@ -1173,5 +1239,97 @@ module cv32e40p_core import cv32e40p_apu_core_pkg::*;
   //----------------------------------------------------------------------------
 
 `endif
+
+`ifdef RVFI
+
+  localparam int RVFI_STAGES = 3;
+
+  logic        rvfi_stage_valid     [RVFI_STAGES];
+  logic [63:0] rvfi_stage_order     [RVFI_STAGES];
+  logic [31:0] rvfi_stage_insn      [RVFI_STAGES];
+  logic        rvfi_stage_trap      [RVFI_STAGES];
+  logic        rvfi_stage_halt      [RVFI_STAGES];
+  logic        rvfi_stage_intr      [RVFI_STAGES];
+  logic [ 1:0] rvfi_stage_mode      [RVFI_STAGES];
+  logic [ 1:0] rvfi_stage_ixl       [RVFI_STAGES];
+  logic [ 4:0] rvfi_stage_rs1_addr  [RVFI_STAGES];
+  logic [ 4:0] rvfi_stage_rs2_addr  [RVFI_STAGES];
+  logic [ 4:0] rvfi_stage_rs3_addr  [RVFI_STAGES];
+  logic [31:0] rvfi_stage_rs1_rdata [RVFI_STAGES];
+  logic [31:0] rvfi_stage_rs2_rdata [RVFI_STAGES];
+  logic [31:0] rvfi_stage_rs3_rdata [RVFI_STAGES];
+  logic [ 4:0] rvfi_stage_rd_addr   [RVFI_STAGES];
+  logic [31:0] rvfi_stage_rd_wdata  [RVFI_STAGES];
+  logic [31:0] rvfi_stage_pc_rdata  [RVFI_STAGES];
+  logic [31:0] rvfi_stage_pc_wdata  [RVFI_STAGES];
+  logic [31:0] rvfi_stage_mem_addr  [RVFI_STAGES];
+  logic [ 3:0] rvfi_stage_mem_rmask [RVFI_STAGES];
+  logic [ 3:0] rvfi_stage_mem_wmask [RVFI_STAGES];
+  logic [31:0] rvfi_stage_mem_rdata [RVFI_STAGES];
+  logic [31:0] rvfi_stage_mem_wdata [RVFI_STAGES];
+
+  logic        rvfi_stage_valid_d   [RVFI_STAGES];
+
+  assign rvfi_valid     = rvfi_stage_valid    [RVFI_STAGES-1];
+  assign rvfi_order     = rvfi_stage_order    [RVFI_STAGES-1];
+  assign rvfi_insn      = rvfi_stage_insn     [RVFI_STAGES-1];
+  assign rvfi_trap      = rvfi_stage_trap     [RVFI_STAGES-1];
+  assign rvfi_halt      = rvfi_stage_halt     [RVFI_STAGES-1];
+  assign rvfi_intr      = rvfi_stage_intr     [RVFI_STAGES-1];
+  assign rvfi_mode      = rvfi_stage_mode     [RVFI_STAGES-1];
+  assign rvfi_ixl       = rvfi_stage_ixl      [RVFI_STAGES-1];
+  assign rvfi_rs1_addr  = rvfi_stage_rs1_addr [RVFI_STAGES-1];
+  assign rvfi_rs2_addr  = rvfi_stage_rs2_addr [RVFI_STAGES-1];
+  assign rvfi_rs3_addr  = rvfi_stage_rs3_addr [RVFI_STAGES-1];
+  assign rvfi_rs1_rdata = rvfi_stage_rs1_rdata[RVFI_STAGES-1];
+  assign rvfi_rs2_rdata = rvfi_stage_rs2_rdata[RVFI_STAGES-1];
+  assign rvfi_rs3_rdata = rvfi_stage_rs3_rdata[RVFI_STAGES-1];
+  assign rvfi_rd_addr   = rvfi_stage_rd_addr  [RVFI_STAGES-1];
+  assign rvfi_rd_wdata  = rvfi_stage_rd_wdata [RVFI_STAGES-1];
+  assign rvfi_pc_rdata  = rvfi_stage_pc_rdata [RVFI_STAGES-1];
+  assign rvfi_pc_wdata  = rvfi_stage_pc_wdata [RVFI_STAGES-1];
+  assign rvfi_mem_addr  = rvfi_stage_mem_addr [RVFI_STAGES-1];
+  assign rvfi_mem_rmask = rvfi_stage_mem_rmask[RVFI_STAGES-1];
+  assign rvfi_mem_wmask = rvfi_stage_mem_wmask[RVFI_STAGES-1];
+  assign rvfi_mem_rdata = rvfi_stage_mem_rdata[RVFI_STAGES-1];
+  assign rvfi_mem_wdata = rvfi_stage_mem_wdata[RVFI_STAGES-1];
+
+  // RF (Register File)
+  assign rvfi_rd_addr_wb  = regfile_waddr_fw_wb_o;
+  assign rvfi_rd_wdata_wb = regfile_wdata;
+  assign rvfi_rd_we_wb    = regfile_we_wb;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 endmodule

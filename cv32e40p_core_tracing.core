@@ -1,0 +1,24 @@
+CAPI=2:
+# Copyright OpenHW Group contributors.
+# Licensed under the Solderpad Hardware Licence, Version 2.0 , see LICENSE for details.
+name: "openhw:cv32e40p:cv32e40p_core_tracing:0.1"
+description: "CV32E40P is an in-order 4-stage RISC-V RV32IMFCXpulp CPU based on RI5CY from PULP-Platform"
+
+filesets:
+  files_rtl:
+    depend:
+      - openhw:cv32e40p:cv32e40p_core
+    files:
+      - bhv/include/cv32e40p_tracer_pkg.sv
+      - bhv/cv32e40p_wrapper.sv
+      - bhv/cv32e40p_tracer.sv
+      - bhv/cv32e40p_sim_clock_gate.sv
+      - bhv/cv32e40p_core_log.sv
+    file_type: systemVerilogSource
+
+
+targets:
+  default: &default
+    filesets:
+      - files_rtl
+    toplevel: cv32e40p_wrapper
